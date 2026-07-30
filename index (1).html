@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controle de Estoque do Cliente</title>
+
+<!-- ============================================================
+     FIREBASE (compat SDK) — troque pela config do SEU projeto
+     ============================================================ -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<!-- Chart.js para os gráficos -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"></script>
+<!-- jsPDF + autotable para gerar PDF do relatório do cliente -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+<style>
+:root{
+  --navy-950:#0d1626;
+  --navy-900:#111d33;
+  --navy-800:#182741;
+  --navy-700:#22345357c;
+  --navy-600:#2b3f63;
+  --gold-500:#d4a24c;
+  --gold-400:#e3b968;
+  --paper:#f5f3ee;
+  --ink:#1b2436;
+  --ink-soft:#5b657c;
+  --line:#e4e1d8;
+  --ok:#3f8f5f;
+  --warn:#c98a1e;
+  --crit:#c4453b;
+  --radius:10px;
+  font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+}
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;}
+body{margin:0;background:var(--paper);color:var(--ink);}
+h1,h2,h3,h4{font-family:'Space Grotesk',sans-serif;margin:0 0 6px;color:var(--navy-900);}
+button{font-family:inherit;cursor:pointer;}
+input,select,textarea{font-family:inherit;}
+
+/* ---------- LOGIN ---------- */
+#loginScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(circle at 30% 20%, var(--navy-800), var(--navy-950));}
+.loginBox{background:var(--navy-900);border:1px solid var(--navy-600);padding:40px 36px;border-radius:16px;
+  width:340px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.4);}
+.loginBox h1{color:var(--gold-400);font-size:22px;}
+.loginBox p{color:#9fabc4;font-size:13px;margin-bottom:22px;}
+.loginBox input{width:100%;padding:12px 14px;border-radius:8px;border:1px solid var(--navy-600);
+  background:var(--navy-800);color:#fff;font-size:16px;letter-spacing:2px;text-align:center;margin-bottom:14px;}
+.loginBox button{width:100%;padding:12px;border:none;border-radius:8px;background:var(--gold-500);
+  color:var(--navy-950);font-weight:700;font-size:14px;}
+.loginErr{color:#e08585;font-size:12px;height:16px;margin-top:-4px;margin-bottom:10px;}
+
+/* ---------- APP SHELL ---------- */
+#app{display:none;min-height:100vh;}
+.shell{display:grid;grid-template-columns:220px 1fr;min-height:100vh;}
+.sidebar{background:var(--navy-950);color:#cfd6e6;padding:22px 14px;position:sticky;top:0;height:100vh;}
+.sidebar .brand{color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:16px;margin-bottom:4px;}
+.sidebar .brand span{color:var(--gold-400);}
+.sidebar .sub{font-size:11px;color:#7f8bab;margin-bottom:24px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;margin-bottom:4px;
+  font-size:13.5px;font-weight:500;color:#b8c0d8;cursor:pointer;border:none;background:transparent;width:100%;text-align:left;}
+.nav-item:hover{background:var(--navy-800);color:#fff;}
+.nav-item.active{background:var(--navy-800);color:var(--gold-400);}
+.main{padding:26px 32px;overflow-x:hidden;}
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;}
+.topbar h2{font-size:20px;}
+.logoutBtn{border:1px solid var(--line);background:#fff;padding:8px 14px;border-radius:8px;font-size:12.5px;color:var(--ink-soft);}
+
+/* ---------- CARDS / GRID ---------- */
+.grid{display:grid;gap:16px;}
+.cards5{grid-template-columns:repeat(5,1fr);}
+.charts2{grid-template-columns:1fr 1fr;margin-top:20px;}
+.card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;}
+.card .lbl{font-size:11.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;}
+.card .val{font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;color:var(--navy-900);}
+.card .val.small{font-size:15px;}
+.card.accentGold{border-left:4px solid var(--gold-500);}
+.card.accentWarn{border-left:4px solid var(--warn);}
+.card.accentCrit{border-left:4px solid var(--crit);}
+.panel{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:18px;}
+.panel h3{font-size:14.5px;margin-bottom:12px;}
+
+/* ---------- TABLE ---------- */
+table{width:100%;border-collapse:collapse;font-size:13.5px;}
+th{text-align:left;color:var(--ink-soft);font-weight:600;font-size:11.5px;text-transform:uppercase;
+  border-bottom:1px solid var(--line);padding:8px 10px;}
+td{padding:9px 10px;border-bottom:1px solid #eeece3;}
+tr:hover td{background:#faf9f5;}
+.badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;}
+.badge.ok{background:#e4f3e9;color:var(--ok);}
+.badge.warn{background:#fbeed4;color:var(--warn);}
+.badge.crit{background:#fbe1de;color:var(--crit);}
+
+/* ---------- FORMS / BUTTONS ---------- */
+.btn{border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:600;}
+.btn-primary{background:var(--navy-900);color:#fff;}
+.btn-primary:hover{background:var(--navy-800);}
+.btn-gold{background:var(--gold-500);color:var(--navy-950);}
+.btn-gold:hover{background:var(--gold-400);}
+.btn-outline{background:#fff;border:1px solid var(--line);color:var(--ink);}
+.btn-danger{background:#fff;border:1px solid #eec7c2;color:var(--crit);}
+.btn-sm{padding:5px 10px;font-size:12px;border-radius:6px;}
+.formRow{display:flex;flex-direction:column;gap:4px;margin-bottom:12px;}
+.formRow label{font-size:12px;font-weight:600;color:var(--ink-soft);}
+.formRow input,.formRow select,.formRow textarea{padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;}
+.formGrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.searchBox{position:relative;}
+.dropdown{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--line);
+  border-radius:8px;max-height:220px;overflow:auto;z-index:20;box-shadow:0 12px 30px rgba(0,0,0,.12);margin-top:4px;}
+.dropdown div{padding:9px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid #f0efe8;}
+.dropdown div:hover{background:#f5f3ee;}
+.dropdown .addNew{color:var(--navy-900);font-weight:700;background:#fbf6ec;}
+.tag{display:inline-block;background:var(--navy-900);color:#fff;font-size:11px;padding:2px 8px;border-radius:12px;margin-left:6px;}
+.modalBg{position:fixed;inset:0;background:rgba(13,22,38,.55);display:flex;align-items:center;justify-content:center;z-index:100;}
+.modalBox{background:#fff;border-radius:12px;padding:24px;width:420px;max-width:90vw;max-height:86vh;overflow:auto;}
+.modalBox h3{margin-bottom:14px;}
+.itemsAdded{border:1px solid var(--line);border-radius:8px;margin-top:10px;}
+.itemRow{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-bottom:1px solid #f0efe8;font-size:13px;}
+.itemRow:last-child{border-bottom:none;}
+.pill{background:#eef0f5;color:var(--navy-900);font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:10px;margin-left:6px;}
+.diffUp{color:var(--ok);font-weight:700;}
+.diffDown{color:var(--crit);font-weight:700;}
+.rowGreen td{background:#eaf6ee !important;}
+.hint{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+.empty{color:var(--ink-soft);font-size:13px;padding:20px;text-align:center;}
+.flexBetween{display:flex;justify-content:space-between;align-items:center;}
+.deficCard{background:#fff;border:1px solid var(--line);border-left:4px solid var(--warn);border-radius:10px;
+  padding:14px 16px;cursor:pointer;transition:.15s;}
+.deficCard:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(0,0,0,.08);}
+.deficCard.critico{border-left-color:var(--crit);}
+.deficCard h4{font-size:14.5px;}
+.deficCard .meta{font-size:11.5px;color:var(--ink-soft);margin-bottom:8px;}
+@media(max-width:1000px){.cards5{grid-template-columns:repeat(2,1fr);}.charts2{grid-template-columns:1fr;}.shell{grid-template-columns:1fr;}
+  .sidebar{position:relative;height:auto;display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+  .sidebar .brand,.sidebar .sub{width:100%;}}
+</style>
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div id="loginScreen">
+  <div class="loginBox">
+    <h1>Controle de Estoque <span>do Cliente</span></h1>
+    <p>Acesso restrito — informe a senha de administrador</p>
+    <input id="loginPass" type="password" maxlength="12" placeholder="••••••">
+    <div class="loginErr" id="loginErr"></div>
+    <button class="btn btn-gold" style="width:100%" onclick="tentarLogin()">Entrar</button>
+  </div>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="app">
+  <div class="shell">
+    <div class="sidebar">
+      <div class="brand">Estoque<span>Cliente</span></div>
+      <div class="sub">Painel de conferências</div>
+      <button class="nav-item active" data-tab="dashboard" onclick="mudarAba('dashboard')">📊 Dashboard</button>
+      <button class="nav-item" data-tab="nova" onclick="mudarAba('nova')">📝 Nova Conferência</button>
+      <button class="nav-item" data-tab="historico" onclick="mudarAba('historico')">🕘 Histórico</button>
+      <button class="nav-item" data-tab="deficit" onclick="mudarAba('deficit')">⚠️ Reposição / Estoque</button>
+      <button class="nav-item" data-tab="clientes" onclick="mudarAba('clientes')">👥 Clientes</button>
+      <button class="nav-item" data-tab="produtos" onclick="mudarAba('produtos')">🛏️ Produtos</button>
+      <button class="nav-item" data-tab="info" onclick="mudarAba('info')">ℹ️ Informações Gerais</button>
+      <button class="nav-item" style="margin-top:14px;color:#8a95b3" onclick="sair()">↩ Sair</button>
+    </div>
+    <div class="main" id="main"></div>
+  </div>
+</div>
+
+<!-- ================= RELATÓRIO INDIVIDUAL (nova aba) ================= -->
+<div id="reportScreen" style="display:none;max-width:900px;margin:0 auto;padding:30px 20px;"></div>
+
+<script>
+/* =========================================================================
+   CONFIGURAÇÃO DO FIREBASE
+   Vá em console.firebase.google.com > seu projeto > Configurações do projeto
+   > Seus apps > SDK setup and configuration > cole os valores abaixo.
+   ========================================================================= */
+const firebaseConfig = {
+  apiKey: "COLE_AQUI",
+  authDomain: "COLE_AQUI.firebaseapp.com",
+  projectId: "COLE_AQUI",
+  storageBucket: "COLE_AQUI.appspot.com",
+  messagingSenderId: "COLE_AQUI",
+  appId: "COLE_AQUI"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const SENHA_ADM = "813927";
+const TIPOS_PRODUTO = ["Colchão","Base","Cabeceira","Adicional"];
+
+/* =========================================================================
+   ESTADO GLOBAL
+   ========================================================================= */
+let clientes = [];
+let produtos = [];
+let conferencias = [];
+let infoGerais = "";
+let abaAtual = "dashboard";
+let chartRefs = {};
+
+// estado da contagem em andamento
+let contagem = { clienteId:null, clienteNome:"", loja:"", roteiro:"", data:"", itens:[] };
+
+/* =========================================================================
+   LOGIN
+   ========================================================================= */
+function tentarLogin(){
+  const val = document.getElementById('loginPass').value;
+  if(val === SENHA_ADM){
+    sessionStorage.setItem('adm_ok','1');
+    iniciarApp();
+  } else {
+    document.getElementById('loginErr').textContent = "Senha incorreta.";
+  }
+}
+document.getElementById('loginPass').addEventListener('keydown', e=>{ if(e.key==='Enter') tentarLogin(); });
+
+function sair(){
+  sessionStorage.removeItem('adm_ok');
+  location.reload();
+}
+
+function iniciarApp(){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('app').style.display='block';
+  carregarDados();
+}
+
+/* =========================================================================
+   CARREGAMENTO DE DADOS (tempo real)
+   ========================================================================= */
+function carregarDados(){
+  db.collection('clientes').orderBy('nome').onSnapshot(snap=>{
+    clientes = snap.docs.map(d=>({id:d.id,...d.data()}));
+    render();
+  });
+  db.collection('produtos').orderBy('nome').onSnapshot(snap=>{
+    produtos = snap.docs.map(d=>({id:d.id,...d.data()}));
+    render();
+  });
+  db.collection('conferencias').orderBy('data','desc').onSnapshot(snap=>{
+    conferencias = snap.docs.map(d=>({id:d.id,...d.data()}));
+    render();
+  });
+  db.collection('config').doc('geral').onSnapshot(doc=>{
+    infoGerais = doc.exists ? (doc.data().texto || "") : "";
+    if(abaAtual==='info') render();
+  });
+}
+
+/* =========================================================================
+   NAVEGAÇÃO
+   ========================================================================= */
+function mudarAba(tab){
+  abaAtual = tab;
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  render();
+}
+
+function render(){
+  const main = document.getElementById('main');
+  if(!main) return;
+  if(abaAtual==='dashboard') main.innerHTML = viewDashboard();
+  else if(abaAtual==='nova') main.innerHTML = viewNovaConferencia();
+  else if(abaAtual==='historico') main.innerHTML = viewHistorico();
+  else if(abaAtual==='deficit') main.innerHTML = viewDeficit();
+  else if(abaAtual==='clientes') main.innerHTML = viewClientes();
+  else if(abaAtual==='produtos') main.innerHTML = viewProdutos();
+  else if(abaAtual==='info') main.innerHTML = viewInfo();
+  if(abaAtual==='dashboard') setTimeout(desenharGraficosDashboard, 30);
+}
+
+/* =========================================================================
+   HELPERS DE NEGÓCIO
+   ========================================================================= */
+function fmtData(iso){
+  if(!iso) return "-";
+  const [y,m,d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+function hojeISO(){
+  const d = new Date();
+  return d.toISOString().slice(0,10);
+}
+function produtoById(id){ return produtos.find(p=>p.id===id); }
+function clienteById(id){ return clientes.find(c=>c.id===id); }
+
+// retorna a conferência mais recente de um cliente (opcionalmente excluindo um id)
+function ultimaConferenciaCliente(clienteId, excluirId){
+  const lista = conferencias.filter(c=>c.clienteId===clienteId && c.id!==excluirId);
+  if(lista.length===0) return null;
+  return lista.slice().sort((a,b)=> (a.data<b.data?1:-1))[0];
+}
+function penultimaConferenciaCliente(clienteId){
+  const lista = conferencias.filter(c=>c.clienteId===clienteId).slice().sort((a,b)=> (a.data<b.data?1:-1));
+  return lista[1] || null;
+}
+
+// status de um item: 'critico' (qtd 0), 'oportunidade' (qtd < minimo), 'ok'
+function statusItem(item){
+  const prod = produtoById(item.produtoId);
+  const minimo = prod ? Number(prod.estoqueMinimo||1) : 1;
+  const qtd = Number(item.quantidade||0);
+  if(qtd<=0) return 'critico';
+  if(qtd<minimo) return 'oportunidade';
+  return 'ok';
+}
+
+// para cada cliente, pega a última conferência e lista os itens com problema
+function calcularDeficiencias(){
+  const out = [];
+  clientes.forEach(cli=>{
+    const ult = ultimaConferenciaCliente(cli.id);
+    if(!ult) return;
+    const problemas = (ult.itens||[]).filter(it=> statusItem(it)!=='ok');
+    if(problemas.length){
+      out.push({
+        cliente: cli,
+        conferencia: ult,
+        itens: problemas,
+        temCritico: problemas.some(p=>statusItem(p)==='critico')
+      });
+    }
+  });
+  return out;
+}
+
+/* =========================================================================
+   DASHBOARD
+   ========================================================================= */
+function viewDashboard(){
+  const deficiencias = calcularDeficiencias();
+  const clientesOportunidade = deficiencias.filter(d=>!d.temCritico).length;
+  const clientesCritico = deficiencias.filter(d=>d.temCritico).length;
+  const ultima = conferencias[0];
+
+  return `
+  <div class="topbar"><h2>Dashboard</h2><button class="logoutBtn" onclick="sair()">Sair</button></div>
+  <div class="grid cards5">
+    <div class="card"><div class="lbl">Produtos cadastrados</div><div class="val">${produtos.length}</div></div>
+    <div class="card"><div class="lbl">Conferências realizadas</div><div class="val">${conferencias.length}</div></div>
+    <div class="card accentGold"><div class="lbl">Oportunidade de reposição</div><div class="val">${clientesOportunidade}</div></div>
+    <div class="card accentCrit"><div class="lbl">Estoque crítico</div><div class="val">${clientesCritico}</div></div>
+    <div class="card"><div class="lbl">Última conferência</div><div class="val small">${ultima ? (clienteById(ultima.clienteId)?.nome||'—')+' · '+fmtData(ultima.data) : '—'}</div></div>
+  </div>
+
+  <div class="grid charts2">
+    <div class="panel"><h3>Clientes com maior necessidade de reposição</h3><canvas id="chartClientesRepo" height="220"></canvas></div>
+    <div class="panel"><h3>Produtos mais encontrados em falta</h3><canvas id="chartProdutosFalta" height="220"></canvas></div>
+  </div>
+  <div class="grid charts2">
+    <div class="panel"><h3>Histórico de conferências por mês</h3><canvas id="chartConfMes" height="220"></canvas></div>
+    <div class="panel"><h3>Distribuição dos tipos de produtos</h3><canvas id="chartTipos" height="220"></canvas></div>
+  </div>
+  `;
+}
+
+function desenharGraficosDashboard(){
+  Object.values(chartRefs).forEach(c=>c && c.destroy());
+  chartRefs = {};
+  const deficiencias = calcularDeficiencias();
+
+  // 1) clientes com mais itens em falta
+  const topClientes = deficiencias.slice().sort((a,b)=>b.itens.length-a.itens.length).slice(0,6);
+  const c1 = document.getElementById('chartClientesRepo');
+  if(c1) chartRefs.c1 = new Chart(c1, {type:'bar', data:{
+    labels: topClientes.map(d=>d.cliente.nome),
+    datasets:[{label:'Itens em falta', data: topClientes.map(d=>d.itens.length), backgroundColor:'#d4a24c'}]
+  }, options:{plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});
+
+  // 2) produtos mais encontrados em falta (frequência entre clientes)
+  const freqProduto = {};
+  deficiencias.forEach(d=> d.itens.forEach(it=>{
+    freqProduto[it.produtoNome] = (freqProduto[it.produtoNome]||0)+1;
+  }));
+  const topProdutos = Object.entries(freqProduto).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const c2 = document.getElementById('chartProdutosFalta');
+  if(c2) chartRefs.c2 = new Chart(c2, {type:'bar', data:{
+    labels: topProdutos.map(p=>p[0]),
+    datasets:[{label:'Clientes em falta', data: topProdutos.map(p=>p[1]), backgroundColor:'#c4453b'}]
+  }, options:{plugins:{legend:{display:false}}, indexAxis:'y', scales:{x:{beginAtZero:true,ticks:{precision:0}}}}});
+
+  // 3) conferências por mês
+  const porMes = {};
+  conferencias.forEach(c=>{
+    const mes = (c.data||'').slice(0,7);
+    if(mes) porMes[mes] = (porMes[mes]||0)+1;
+  });
+  const mesesOrdenados = Object.keys(porMes).sort();
+  const c3 = document.getElementById('chartConfMes');
+  if(c3) chartRefs.c3 = new Chart(c3, {type:'line', data:{
+    labels: mesesOrdenados,
+    datasets:[{label:'Conferências', data: mesesOrdenados.map(m=>porMes[m]), borderColor:'#182741', backgroundColor:'rgba(24,39,65,.15)', fill:true, tension:.3}]
+  }, options:{plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});
+
+  // 4) distribuição tipos de produto
+  const porTipo = {};
+  TIPOS_PRODUTO.forEach(t=>porTipo[t]=0);
+  produtos.forEach(p=> porTipo[p.tipo] = (porTipo[p.tipo]||0)+1);
+  const c4 = document.getElementById('chartTipos');
+  if(c4) chartRefs.c4 = new Chart(c4, {type:'doughnut', data:{
+    labels: Object.keys(porTipo),
+    datasets:[{data:Object.values(porTipo), backgroundColor:['#182741','#d4a24c','#3f8f5f','#c4453b']}]
+  }, options:{plugins:{legend:{position:'bottom'}}}});
+}
+
+/* =========================================================================
+   NOVA CONFERÊNCIA
+   ========================================================================= */
+function resetContagem(){
+  contagem = { clienteId:null, clienteNome:"", loja:"", roteiro:"", data:hojeISO(), itens:[] };
+}
+if(!contagem.data) contagem.data = hojeISO();
+
+function viewNovaConferencia(){
+  return `
+  <div class="topbar"><h2>Nova Conferência</h2><button class="logoutBtn" onclick="sair()">Sair</button></div>
+
+  <div class="panel" style="margin-bottom:16px;">
+    <h3>1. Cliente</h3>
+    ${contagem.clienteId ? `
+      <div class="flexBetween">
+        <div>
+          <strong>${contagem.clienteNome}</strong>
+          <span class="pill">${contagem.loja||'sem loja'}</span>
+          <span class="pill">Roteiro: ${contagem.roteiro||'-'}</span>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="trocarCliente()">Trocar cliente</button>
+      </div>
+      <div class="formGrid" style="margin-top:12px;">
+        <div class="formRow"><label>Loja</label><input id="lojaInput" value="${contagem.loja||''}" oninput="contagem.loja=this.value"></div>
+        <div class="formRow"><label>Data da conferência</label><input type="date" id="dataInput" value="${contagem.data}" oninput="contagem.data=this.value"></div>
+      </div>
+      ${ultimaConferenciaCliente(contagem.clienteId) ? `
+        <button class="btn btn-outline btn-sm" onclick="carregarUltimaContagem()">↺ Iniciar a partir da última contagem (${fmtData(ultimaConferenciaCliente(contagem.clienteId).data)})</button>
+      ` : ''}
+    ` : `
+      <div class="searchBox">
+        <input id="clienteSearch" placeholder="Buscar cliente pelo nome..." oninput="buscarCliente(this.value)" autocomplete="off">
+        <div id="clienteDropdown"></div>
+      </div>
+    `}
+  </div>
+
+  ${contagem.clienteId ? `
+  <div class="panel" style="margin-bottom:16px;">
+    <h3>2. Adicionar produto contado</h3>
+    <div class="formGrid">
+      <div class="formRow searchBox">
+        <label>Produto</label>
+        <input id="produtoSearch" placeholder="Buscar produto..." oninput="buscarProduto(this.value)" autocomplete="off">
+        <div id="produtoDropdown"></div>
+        <div class="hint" id="produtoSelecionadoHint"></div>
+      </div>
+      <div class="formRow">
+        <label>Quantidade contada</label>
+        <input type="number" min="0" id="qtdInput" placeholder="0">
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="adicionarItemContagem()">+ Adicionar item</button>
+  </div>
+
+  <div class="panel">
+    <div class="flexBetween">
+      <h3>Itens da contagem (${contagem.itens.length})</h3>
+      ${contagem.itens.length ? `<button class="btn btn-gold" onclick="finalizarContagem()">Finalizar contagem</button>` : ''}
+    </div>
+    <div class="itemsAdded">
+      ${contagem.itens.length ? contagem.itens.map((it,i)=>`
+        <div class="itemRow">
+          <span>${it.produtoNome} <span class="pill">${it.tipo}</span> <span class="pill">${it.tamanho}</span></span>
+          <span><strong>${it.quantidade}</strong> un. <button class="btn btn-outline btn-sm" style="margin-left:10px" onclick="removerItemContagem(${i})">remover</button></span>
+        </div>
+      `).join('') : `<div class="empty">Nenhum item adicionado ainda.</div>`}
+    </div>
+  </div>
+  ` : ''}
+  `;
+}
+
+let clienteSelecionadoTemp = null;
+function buscarCliente(termo){
+  const dd = document.getElementById('clienteDropdown');
+  if(!termo){ dd.innerHTML=''; return; }
+  const filtro = clientes.filter(c=>c.nome.toLowerCase().includes(termo.toLowerCase()));
+  let html = '<div class="dropdown">';
+  filtro.forEach(c=>{
+    html += `<div onclick="selecionarCliente('${c.id}')">${c.nome} <span class="hint">${c.loja||''}</span></div>`;
+  });
+  html += `<div class="addNew" onclick="abrirNovoCliente('${termo.replace(/'/g,"\\'")}')">+ Adicionar novo cliente "${termo}"</div>`;
+  html += '</div>';
+  dd.innerHTML = html;
+}
+function selecionarCliente(id){
+  const c = clienteById(id);
+  contagem.clienteId = c.id;
+  contagem.clienteNome = c.nome;
+  contagem.loja = c.loja || "";
+  contagem.roteiro = c.roteiro || "";
+  render();
+}
+function trocarCliente(){
+  contagem.clienteId=null; contagem.clienteNome=""; contagem.loja=""; contagem.roteiro=""; contagem.itens=[];
+  render();
+}
+function abrirNovoCliente(nomeSugerido){
+  abrirModal(`
+    <h3>Novo Cliente</h3>
+    <div class="formRow"><label>Nome</label><input id="ncNome" value="${nomeSugerido||''}"></div>
+    <div class="formRow"><label>Loja</label><input id="ncLoja"></div>
+    <div class="formRow"><label>Roteiro</label><input id="ncRoteiro" placeholder="Ex: Roteiro 3 - Zona Norte"></div>
+    <div class="flexBetween"><button class="btn btn-outline" onclick="fecharModal()">Cancelar</button>
+    <button class="btn btn-primary" onclick="salvarNovoClienteInline()">Salvar e selecionar</button></div>
+  `);
+}
+function salvarNovoClienteInline(){
+  const nome = document.getElementById('ncNome').value.trim();
+  const loja = document.getElementById('ncLoja').value.trim();
+  const roteiro = document.getElementById('ncRoteiro').value.trim();
+  if(!nome){ alert('Informe o nome do cliente.'); return; }
+  db.collection('clientes').add({nome,loja,roteiro,criadoEm:new Date().toISOString()}).then(ref=>{
+    contagem.clienteId = ref.id; contagem.clienteNome = nome; contagem.loja = loja; contagem.roteiro = roteiro;
+    fecharModal(); render();
+  });
+}
+
+let produtoSelecionadoTemp = null;
+function buscarProduto(termo){
+  const dd = document.getElementById('produtoDropdown');
+  if(!termo){ dd.innerHTML=''; return; }
+  const filtro = produtos.filter(p=>p.nome.toLowerCase().includes(termo.toLowerCase()));
+  let html = '<div class="dropdown">';
+  filtro.forEach(p=>{
+    html += `<div onclick="selecionarProduto('${p.id}')">${p.nome} <span class="hint">${p.tipo} · ${p.tamanho}</span></div>`;
+  });
+  html += `<div class="addNew" onclick="abrirNovoProduto('${termo.replace(/'/g,"\\'")}')">+ Adicionar novo produto "${termo}"</div>`;
+  html += '</div>';
+  dd.innerHTML = html;
+}
+function selecionarProduto(id){
+  produtoSelecionadoTemp = produtoById(id);
+  document.getElementById('produtoDropdown').innerHTML='';
+  document.getElementById('produtoSearch').value = produtoSelecionadoTemp.nome;
+  document.getElementById('produtoSelecionadoHint').textContent = `Selecionado: ${produtoSelecionadoTemp.tipo} · ${produtoSelecionadoTemp.tamanho}`;
+}
+function abrirNovoProduto(nomeSugerido){
+  abrirModal(`
+    <h3>Novo Produto</h3>
+    <div class="formRow"><label>Nome</label><input id="npNome" value="${nomeSugerido||''}"></div>
+    <div class="formRow"><label>Tipo</label>
+      <select id="npTipo">${TIPOS_PRODUTO.map(t=>`<option>${t}</option>`).join('')}</select>
+    </div>
+    <div class="formRow"><label>Tamanho</label><input id="npTamanho" placeholder="Ex: Queen, Solteiro, King..."></div>
+    <div class="formRow"><label>Estoque mínimo recomendado</label><input type="number" id="npMin" value="1" min="0"></div>
+    <div class="flexBetween"><button class="btn btn-outline" onclick="fecharModal()">Cancelar</button>
+    <button class="btn btn-primary" onclick="salvarNovoProdutoInline()">Salvar e selecionar</button></div>
+  `);
+}
+function salvarNovoProdutoInline(){
+  const nome = document.getElementById('npNome').value.trim();
+  const tipo = document.getElementById('npTipo').value;
+  const tamanho = document.getElementById('npTamanho').value.trim();
+  const estoqueMinimo = Number(document.getElementById('npMin').value||1);
+  if(!nome || !tamanho){ alert('Preencha nome e tamanho.'); return; }
+  db.collection('produtos').add({nome,tipo,tamanho,estoqueMinimo,criadoEm:new Date().toISOString()}).then(ref=>{
+    produtoSelecionadoTemp = {id:ref.id,nome,tipo,tamanho,estoqueMinimo};
+    fecharModal();
+    document.getElementById('produtoSearch').value = nome;
+    document.getElementById('produtoSelecionadoHint').textContent = `Selecionado: ${tipo} · ${tamanho}`;
+  });
+}
+function adicionarItemContagem(){
+  if(!produtoSelecionadoTemp){ alert('Busque e selecione um produto.'); return; }
+  const qtd = Number(document.getElementById('qtdInput').value);
+  if(isNaN(qtd) || qtd<0){ alert('Informe a quantidade contada.'); return; }
+  contagem.itens.push({
+    produtoId: produtoSelecionadoTemp.id,
+    produtoNome: produtoSelecionadoTemp.nome,
+    tipo: produtoSelecionadoTemp.tipo,
+    tamanho: produtoSelecionadoTemp.tamanho,
+    quantidade: qtd
+  });
+  produtoSelecionadoTemp = null;
+  render();
+}
+function removerItemContagem(i){ contagem.itens.splice(i,1); render(); }
+
+function carregarUltimaContagem(){
+  const ult = ultimaConferenciaCliente(contagem.clienteId);
+  if(!ult) return;
+  contagem.itens = (ult.itens||[]).map(it=>({...it}));
+  render();
+}
+
+function finalizarContagem(){
+  if(!contagem.itens.length){ alert('Adicione ao menos um item.'); return; }
+  db.collection('conferencias').add({
+    clienteId: contagem.clienteId,
+    clienteNome: contagem.clienteNome,
+    loja: contagem.loja,
+    roteiro: contagem.roteiro,
+    data: contagem.data || hojeISO(),
+    itens: contagem.itens,
+    criadoEm: new Date().toISOString()
+  }).then(()=>{
+    alert('Contagem finalizada e salva com sucesso!');
+    resetContagem();
+    mudarAba('historico');
+  });
+}
+
+/* =========================================================================
+   HISTÓRICO
+   ========================================================================= */
+let filtroHistoricoCliente = "";
+function viewHistorico(){
+  const lista = conferencias.filter(c=> !filtroHistoricoCliente || c.clienteId===filtroHistoricoCliente);
+  return `
+  <div class="topbar"><h2>Histórico de Conferências</h2><button class="logoutBtn" onclick="sair()">Sair</button></div>
+  <div class="panel" style="margin-bottom:16px;">
+    <div class="formRow" style="max-width:320px;">
+      <label>Filtrar por cliente</label>
+      <select onchange="filtroHistoricoCliente=this.value; render()">
+        <option value="">Todos os clientes</option>
+        ${clientes.map(c=>`<option value="${c.id}" ${filtroHistoricoCliente===c.id?'selected':''}>${c.nome}</option>`).join('')}
+      </select>
+    </div>
+  </div>
+  <div class="panel">
+    ${lista.length===0 ? `<div class="empty">Nenhuma conferência encontrada.</div>` : `
+    <table>
+      <thead><tr><th>Data</th><th>Cliente</th><th>Loja</th><th>Itens</th><th>Ações</th></tr></thead>
+      <tbody>
+        ${lista.map(c=>`
+          <tr>
+            <td>${fmtData(c.data)}</td>
+            <td>${c.clienteNome}</td>
+            <td>${c.loja||'-'}</td>
+            <td>${(c.itens||[]).length}</td>
+            <td><button class="btn btn-outline btn-sm" onclick="verConferencia('${c.id}')">Ver itens</button></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>`}
+  </div>
+  `;
+}
+function verConferencia(id){
+  const c = conferencias.find(x=>x.id===id);
+  if(!c) return;
+  abrirModal(`
+    <h3>${c.clienteNome} — ${fmtData(c.data)}</h3>
+    <table>
+      <thead><tr><th>Produto</th><th>Tipo</th><th>Tamanho</th><th>Qtd</th></tr></thead>
+      <tbody>${(c.itens||[]).map(it=>`<tr><td>${it.produtoNome}</td><td>${it.tipo}</td><td>${it.tamanho}</td><td>${it.quantidade}</td></tr>`).join('')}</tbody>
+    </table>
+    <div style="text-align:right;margin-top:14px;"><button class="btn btn-outline" onclick="fecharModal()">Fechar</button></div>
+  `);
+}
+
+/* =========================================================================
+   REPOSIÇÃO / ESTOQUE (quadros de deficiência)
+   ========================================================================= */
+function viewDeficit(){
+  const deficiencias = calcularDeficiencias().sort((a,b)=> (b.temCritico - a.temCritico) || (b.itens.length-a.itens.length));
+  // quadro plano: produto x cliente com estoque baixo
+  const linhasBaixo = [];
+  deficiencias.forEach(d=> d.itens.forEach(it=> linhasBaixo.push({cliente:d.cliente.nome, produto:it.produtoNome, tipo:it.tipo, tamanho:it.tamanho, qtd:it.quantidade, status:statusItem(it)})));
+
+  return `
+  <div class="topbar"><h2>Reposição &amp; Estoque</h2><button class="logoutBtn" onclick="sair()">Sair</button></div>
+
+  <h3 style="margin-bottom:10px;">Clientes com produtos em falta</h3>
+  <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(240px,1fr));margin-bottom:24px;">
+    ${deficiencias.length===0 ? `<div class="empty">Nenhum cliente com deficiência de estoque no momento 🎉</div>` :
+      deficiencias.map(d=>`
+      <div class="deficCard ${d.temCritico?'critico':''}" onclick="abrirRelatorioCliente('${d.cliente.id}')">
+        <h4>${d.cliente.nome}</h4>
+        <div class="meta">${d.cliente.loja||'sem loja'} · última conf. ${fmtData(d.conferencia.data)}</div>
+        <span class="badge ${d.temCritico?'crit':'warn'}">${d.itens.length} item(ns) ${d.temCritico?'crítico(s)':'em oportunidade'}</span>
+      </div>
+    `).join('')}
+  </div>
+
+  <h3 style="margin-bottom:10px;">Quadro geral de estoque baixo</h3>
+  <div class="panel">
+    ${linhasBaixo.length===0 ? `<div class="empty">Nada em falta no momento.</div>` : `
+    <table>
+      <thead><tr><th>Cliente</th><th>Produto</th><th>Tipo</th><th>Tamanho</th><th>Qtd. atual</th><th>Status</th></tr></thead>
+      <tbody>${linhasBaixo.map(l=>`
+        <tr>
+          <td>${l.cliente}</td><td>${l.produto}</td><td>${l.tipo}</td><td>${l.tamanho}</td><td>${l.qtd}</td>
+          <td><span class="badge ${l.status==='critico'?'crit':'warn'}">${l.status==='critico'?'Crítico':'Oportunidade'}</span></td>
+        </tr>`).join('')}</tbody>
+    </table>`}
+  </div>
+  `;
+}
+
+function abrirRelatorioCliente(clienteId){
+  window.open(location.pathname + '?cliente=' + clienteId, '_blank');
+}
+
+/* =========================================================================
+   CLIENTES (CRUD)
+   ========================================================================= */
+function viewClientes(){
+  return `
+  <div class="topbar"><h2>Clientes</h2><button class="logoutBtn" onclick="sair()">Sair</button></div>
+  <button class="btn btn-primary" style="margin-bottom:14px;" onclick="abrirModalCliente()">+ Novo Cliente</button>
+  <div class="panel">
+    ${clientes.length===0 ? `<div class="empty">Nenhum cliente cadastrado.</div>` : `
+    <table>
+      <thead><tr><th>Nome</th><th>Loja</th><th>Roteiro</th><th>Ações</th></tr></thead>
+      <tbody>${clientes.map(c=>`
+        <tr>
+          <td>${c.nome}</td><td>${c.loja||'-'}</td><td>${c.roteiro||'-'}</td>
+          <td>
+            <button class="btn btn-outline btn-sm" onclick="abrirModalCliente('${c.id}')">Editar</button>
+            <button class="btn btn-danger btn-sm" onclick="excluirCliente('${c.id}')">Excluir</button>
+          </td>
+        </tr>`).join('')}</tbody>
+    </table>`}
+  </div>
+  `;
+}
+function abrirModalCliente(id){
+  const c = id ? clienteById(id) : null;
+  abrirModal(`
+    <h3>${c?'Editar':'Novo'} Cliente</h3>
+    <div class="formRow"><label>Nome</label><input id="mcNome" value="${c?c.nome:''}"></div>
+    <div class="formRow"><label>Loja</label><input id="mcLoja" value="${c?c.loja||'':''}"></div>
+    <div class="formRow"><label>Roteiro</label><input id="mcRoteiro" value="${c?c.roteiro||'':''}" placeholder="Ex: Roteiro 3 - Zona Norte"></div>
+    <div class="flexBetween"><button class="btn btn-outline" onclick="fecharModal()">Cancelar</button>
+    <button class="btn btn-primary" onclick="salvarCliente('${id||''}')">Salvar</button></div>
+  `);
+}
+function salvarCliente(id){
+  const nome = document.getElementById('mcNome').value.trim();
+  const loja = document.getElementById('mcLoja').value.trim();
+  const roteiro = document.getElementById('mcRoteiro').value.trim();
+  if(!nome){ alert('Informe o nome.'); return; }
+  const dados = {nome,loja,roteiro};
+  const p = id ? db.collection('clientes').doc(id).update(dados)
+               : db.collection('clientes').add({...dados, criadoEm:new Date().toISOString()});
+  p.then(()=>{ fecharModal(); });
+}
+function excluirCliente(id){
+  if(!confirm('Excluir este cliente? Esta ação não apaga o histórico de conferências já salvo.')) return;
+  db.collection('clientes').doc(id).delete();
+}
+
+/* =========================================================================
+   PRODUTOS (CRUD)
+   ========================================================================= */
+function viewProdutos(){
+  return `
+  <div class="topbar"><h2>Produtos</h2><button class="logoutBtn" onclick="sair()">Sair</button></div>
+  <button class="btn btn-primary" style="margin-bottom:14px;" onclick="abrirModalProduto()">+ Novo Produto</button>
+  <div class="panel">
+    ${produtos.length===0 ? `<div class="empty">Nenhum produto cadastrado.</div>` : `
+    <table>
+      <thead><tr><th>Nome</th><th>Tipo</th><th>Tamanho</th><th>Estoque mínimo</th><th>Ações</th></tr></thead>
+      <tbody>${produtos.map(p=>`
+        <tr>
+          <td>${p.nome}</td><td>${p.tipo}</td><td>${p.tamanho}</td><td>${p.estoqueMinimo??1}</td>
+          <td>
+            <button class="btn btn-outline btn-sm" onclick="abrirModalProduto('${p.id}')">Editar</button>
+            <button class="btn btn-danger btn-sm" onclick="excluirProduto('${p.id}')">Excluir</button>
+          </td>
+        </tr>`).join('')}</tbody>
+    </table>`}
+  </div>
+  `;
+}
+function abrirModalProduto(id){
+  const p = id ? produtoById(id) : null;
+  abrirModal(`
+    <h3>${p?'Editar':'Novo'} Produto</h3>
+    <div class="formRow"><label>Nome</label><input id="mpNome" value="${p?p.nome:''}"></div>
+    <div class="formRow"><label>Tipo</label>
+      <select id="mpTipo">${TIPOS_PRODUTO.map(t=>`<option ${p&&p.tipo===t?'selected':''}>${t}</option>`).join('')}</select>
+    </div>
+    <div class="formRow"><label>Tamanho</label><input id="mpTamanho" value="${p?p.tamanho:''}"></div>
+    <div class="formRow"><label>Estoque mínimo recomendado</label><input type="number" id="mpMin" value="${p?p.estoqueMinimo??1:1}" min="0"></div>
+    <div class="flexBetween"><button class="btn btn-outline" onclick="fecharModal()">Cancelar</button>
+    <button class="btn btn-primary" onclick="salvarProduto('${id||''}')">Salvar</button></div>
+  `);
+}
+function salvarProduto(id){
+  const nome = document.getElementById('mpNome').value.trim();
+  const tipo = document.getElementById('mpTipo').value;
+  const tamanho = document.getElementById('mpTamanho').value.trim();
+  const estoqueMinimo = Number(document.getElementById('mpMin').value||1);
+  if(!nome || !tamanho){ alert('Preencha nome e tamanho.'); return; }
+  const dados = {nome,tipo,tamanho,estoqueMinimo};
+  const p = id ? db.collection('produtos').doc(id).update(dados)
+               : db.collection('produtos').add({...dados, criadoEm:new Date().toISOString()});
+  p.then(()=>{ fecharModal(); });
+}
+function excluirProduto(id){
+  if(!confirm('Excluir este produto?')) return;
+  db.collection('produtos').doc(id).delete();
+}
+
+/* =========================================================================
+   INFORMAÇÕES GERAIS
+   ========================================================================= */
+function viewInfo(){
+  return `
+  <div class="topbar"><h2>Informações Gerais</h2><button class="logoutBtn" onclick="sair()">Sair</button></div>
+  <div class="panel">
+    <div class="formRow">
+      <label>Anotações / instruções gerais da equipe</label>
+      <textarea id="infoTexto" rows="14" placeholder="Ex: instruções de roteiro, observações sobre conferências, avisos da rede...">${infoGerais}</textarea>
+    </div>
+    <button class="btn btn-primary" onclick="salvarInfo()">Salvar</button>
+  </div>
+  `;
+}
+function salvarInfo(){
+  const texto = document.getElementById('infoTexto').value;
+  db.collection('config').doc('geral').set({texto}).then(()=> alert('Salvo!'));
+}
+
+/* =========================================================================
+   MODAL GENÉRICO
+   ========================================================================= */
+function abrirModal(html){
+  fecharModal();
+  const bg = document.createElement('div');
+  bg.className='modalBg'; bg.id='modalBg';
+  bg.innerHTML = `<div class="modalBox">${html}</div>`;
+  bg.addEventListener('click', e=>{ if(e.target===bg) fecharModal(); });
+  document.body.appendChild(bg);
+}
+function fecharModal(){
+  const bg = document.getElementById('modalBg');
+  if(bg) bg.remove();
+}
+
+/* =========================================================================
+   RELATÓRIO INDIVIDUAL DO CLIENTE (aba separada, via ?cliente=ID)
+   ========================================================================= */
+function checarRelatorioIndividual(){
+  const params = new URLSearchParams(location.search);
+  const clienteId = params.get('cliente');
+  if(!clienteId) return false;
+
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('app').style.display='none';
+  document.getElementById('reportScreen').style.display='block';
+
+  db.collection('clientes').doc(clienteId).get().then(cliDoc=>{
+    Promise.all([
+      db.collection('produtos').get(),
+      db.collection('conferencias').where('clienteId','==',clienteId).get()
+    ]).then(([prodSnap, confSnap])=>{
+      produtos = prodSnap.docs.map(d=>({id:d.id,...d.data()}));
+      const confs = confSnap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=> (a.data<b.data?1:-1));
+      renderRelatorioIndividual({id:cliDoc.id,...cliDoc.data()}, confs);
+    });
+  });
+  return true;
+}
+
+function renderRelatorioIndividual(cliente, confs){
+  const atual = confs[0];
+  const anterior = confs[1];
+  const el = document.getElementById('reportScreen');
+  if(!atual){
+    el.innerHTML = `<h2>${cliente.nome}</h2><p>Nenhuma conferência registrada para este cliente ainda.</p>`;
+    return;
+  }
+  const mapAnterior = {};
+  (anterior?.itens||[]).forEach(it=> mapAnterior[it.produtoId] = it.quantidade);
+
+  const linhas = (atual.itens||[]).map(it=>{
+    const st = statusItem(it);
+    const qtdAnt = mapAnterior.hasOwnProperty(it.produtoId) ? mapAnterior[it.produtoId] : null;
+    let diffHtml = '-';
+    if(qtdAnt!==null){
+      const diff = it.quantidade - qtdAnt;
+      diffHtml = diff===0 ? 'sem alteração' : (diff>0 ? `<span class="diffUp">+${diff}</span>` : `<span class="diffDown">${diff}</span>`);
+    }
+    return {it, st, diffHtml, qtdAnt};
+  });
+
+  window.__linhasRelatorio = linhas;
+  window.__clienteRelatorio = cliente;
+  window.__confRelatorio = atual;
+
+  el.innerHTML = `
+  <div class="flexBetween" style="margin-bottom:6px;">
+    <div>
+      <h2>${cliente.nome}</h2>
+      <div class="hint">${cliente.loja||'sem loja'} · Roteiro: ${cliente.roteiro||'-'} · Conferência de ${fmtData(atual.data)}
+      ${anterior? ' · comparado com '+fmtData(anterior.data): ''}</div>
+    </div>
+    <div>
+      <button class="btn btn-outline" onclick="gerarPdfCliente()">⬇ Gerar PDF</button>
+      <button class="btn btn-gold" onclick="irParaNovaContagemCliente('${cliente.id}')">Iniciar nova contagem a partir desta</button>
+    </div>
+  </div>
+  <div class="panel" style="margin-top:14px;">
+    <table id="tabelaRelatorio">
+      <thead><tr><th>Produto</th><th>Tipo</th><th>Tamanho</th><th>Qtd. anterior</th><th>Qtd. atual</th><th>Diferença</th><th>Status</th></tr></thead>
+      <tbody>
+        ${linhas.map(l=>`
+          <tr class="${l.st==='oportunidade'?'rowGreen':''}">
+            <td>${l.it.produtoNome}</td><td>${l.it.tipo}</td><td>${l.it.tamanho}</td>
+            <td>${l.qtdAnt===null?'-':l.qtdAnt}</td><td>${l.it.quantidade}</td><td>${l.diffHtml}</td>
+            <td><span class="badge ${l.st==='critico'?'crit':(l.st==='oportunidade'?'warn':'ok')}">${l.st==='critico'?'Crítico':(l.st==='oportunidade'?'Oportunidade':'OK')}</span></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>
+  <p class="hint" style="margin-top:14px;">Linhas em verde indicam produtos com oportunidade de reposição.</p>
+  `;
+}
+
+function irParaNovaContagemCliente(clienteId){
+  window.opener ? (window.opener.location.href = location.pathname) : null;
+  alert('Abra a aba principal do sistema, vá em "Nova Conferência", selecione este cliente e use o botão "Iniciar a partir da última contagem".');
+}
+
+function gerarPdfCliente(){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const cliente = window.__clienteRelatorio;
+  const conf = window.__confRelatorio;
+  const linhas = window.__linhasRelatorio;
+
+  doc.setFontSize(16);
+  doc.text('Relatório de Conferência de Estoque', 14, 18);
+  doc.setFontSize(11);
+  doc.text(`Cliente: ${cliente.nome}`, 14, 28);
+  doc.text(`Loja: ${cliente.loja||'-'}   Roteiro: ${cliente.roteiro||'-'}`, 14, 34);
+  doc.text(`Data da conferência: ${fmtData(conf.data)}`, 14, 40);
+
+  doc.autoTable({
+    startY: 48,
+    head: [['Produto','Tipo','Tamanho','Qtd. anterior','Qtd. atual','Diferença','Status']],
+    body: linhas.map(l=>[
+      l.it.produtoNome, l.it.tipo, l.it.tamanho,
+      l.qtdAnt===null?'-':l.qtdAnt, l.it.quantidade,
+      l.diffHtml.replace(/<[^>]+>/g,''),
+      l.st==='critico'?'Crítico':(l.st==='oportunidade'?'Oportunidade':'OK')
+    ]),
+    didParseCell: function(data){
+      if(data.section==='body'){
+        const linha = linhas[data.row.index];
+        if(linha && linha.st==='oportunidade'){ data.cell.styles.fillColor = [234,246,238]; }
+      }
+    },
+    headStyles:{fillColor:[24,39,65]}
+  });
+
+  doc.save(`relatorio_${cliente.nome.replace(/\s+/g,'_')}_${conf.data}.pdf`);
+}
+
+/* =========================================================================
+   BOOT
+   ========================================================================= */
+(function boot(){
+  const ehRelatorio = checarRelatorioIndividual();
+  if(ehRelatorio) return;
+  if(sessionStorage.getItem('adm_ok')==='1'){
+    iniciarApp();
+  }
+})();
+</script>
+</body>
+</html>
