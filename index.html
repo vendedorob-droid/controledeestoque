@@ -183,12 +183,12 @@ tr:hover td{background:#faf9f5;}
    > Seus apps > SDK setup and configuration > cole os valores abaixo.
    ========================================================================= */
 const firebaseConfig = {
-  apiKey: "AIzaSyA0uYpmYsElqNyd3YtINH6IGQRjiynX-qo",
-  authDomain: "estoque-cliente.firebaseapp.com",
-  projectId: "estoque-cliente",
-  storageBucket: "estoque-cliente.firebasestorage.app",
-  messagingSenderId: "764943061191",
-  appId: "1:764943061191:web:595f5e92a602c024a72ee2"
+  apiKey: "COLE_AQUI",
+  authDomain: "COLE_AQUI.firebaseapp.com",
+  projectId: "COLE_AQUI",
+  storageBucket: "COLE_AQUI.appspot.com",
+  messagingSenderId: "COLE_AQUI",
+  appId: "COLE_AQUI"
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
@@ -560,6 +560,7 @@ function abrirNovoProduto(nomeSugerido){
     </div>
     <div class="formRow"><label>Tamanho</label><input id="npTamanho" placeholder="Ex: Queen, Solteiro, King..."></div>
     <div class="formRow"><label>Estoque mínimo recomendado</label><input type="number" id="npMin" value="1" min="0"></div>
+    <div class="formRow"><label>Valor aproximado (R$)</label><input type="number" id="npValor" step="0.01" min="0" placeholder="0,00"></div>
     <div class="flexBetween"><button class="btn btn-outline" onclick="fecharModal()">Cancelar</button>
     <button class="btn btn-primary" onclick="salvarNovoProdutoInline()">Salvar e selecionar</button></div>
   `);
@@ -569,9 +570,10 @@ function salvarNovoProdutoInline(){
   const tipo = document.getElementById('npTipo').value;
   const tamanho = document.getElementById('npTamanho').value.trim();
   const estoqueMinimo = Number(document.getElementById('npMin').value||1);
+  const valorAproximado = Number(document.getElementById('npValor').value||0);
   if(!nome || !tamanho){ alert('Preencha nome e tamanho.'); return; }
-  db.collection('produtos').add({nome,tipo,tamanho,estoqueMinimo,criadoEm:new Date().toISOString()}).then(ref=>{
-    produtoSelecionadoTemp = {id:ref.id,nome,tipo,tamanho,estoqueMinimo};
+  db.collection('produtos').add({nome,tipo,tamanho,estoqueMinimo,valorAproximado,criadoEm:new Date().toISOString()}).then(ref=>{
+    produtoSelecionadoTemp = {id:ref.id,nome,tipo,tamanho,estoqueMinimo,valorAproximado};
     fecharModal();
     document.getElementById('produtoSearch').value = nome;
     document.getElementById('produtoSelecionadoHint').textContent = `Selecionado: ${tipo} · ${tamanho}`;
@@ -768,10 +770,11 @@ function viewProdutos(){
   <div class="panel">
     ${produtos.length===0 ? `<div class="empty">Nenhum produto cadastrado.</div>` : `
     <table>
-      <thead><tr><th>Nome</th><th>Tipo</th><th>Tamanho</th><th>Estoque mínimo</th><th>Ações</th></tr></thead>
+      <thead><tr><th>Nome</th><th>Tipo</th><th>Tamanho</th><th>Estoque mínimo</th><th>Valor aprox.</th><th>Ações</th></tr></thead>
       <tbody>${produtos.map(p=>`
         <tr>
           <td>${p.nome}</td><td>${p.tipo}</td><td>${p.tamanho}</td><td>${p.estoqueMinimo??1}</td>
+          <td>${p.valorAproximado ? 'R$ '+Number(p.valorAproximado).toFixed(2).replace('.',',') : '-'}</td>
           <td>
             <button class="btn btn-outline btn-sm" onclick="abrirModalProduto('${p.id}')">Editar</button>
             <button class="btn btn-danger btn-sm" onclick="excluirProduto('${p.id}')">Excluir</button>
@@ -791,6 +794,7 @@ function abrirModalProduto(id){
     </div>
     <div class="formRow"><label>Tamanho</label><input id="mpTamanho" value="${p?p.tamanho:''}"></div>
     <div class="formRow"><label>Estoque mínimo recomendado</label><input type="number" id="mpMin" value="${p?p.estoqueMinimo??1:1}" min="0"></div>
+    <div class="formRow"><label>Valor aproximado (R$)</label><input type="number" id="mpValor" step="0.01" min="0" value="${p&&p.valorAproximado?p.valorAproximado:''}" placeholder="0,00"></div>
     <div class="flexBetween"><button class="btn btn-outline" onclick="fecharModal()">Cancelar</button>
     <button class="btn btn-primary" onclick="salvarProduto('${id||''}')">Salvar</button></div>
   `);
@@ -800,8 +804,9 @@ function salvarProduto(id){
   const tipo = document.getElementById('mpTipo').value;
   const tamanho = document.getElementById('mpTamanho').value.trim();
   const estoqueMinimo = Number(document.getElementById('mpMin').value||1);
+  const valorAproximado = Number(document.getElementById('mpValor').value||0);
   if(!nome || !tamanho){ alert('Preencha nome e tamanho.'); return; }
-  const dados = {nome,tipo,tamanho,estoqueMinimo};
+  const dados = {nome,tipo,tamanho,estoqueMinimo,valorAproximado};
   const p = id ? db.collection('produtos').doc(id).update(dados)
                : db.collection('produtos').add({...dados, criadoEm:new Date().toISOString()});
   p.then(()=>{ fecharModal(); });
